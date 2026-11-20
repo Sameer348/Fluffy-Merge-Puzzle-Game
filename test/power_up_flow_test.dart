@@ -1,3 +1,4 @@
+import 'package:fluffy_merge/core/services/ads/ad_service.dart';
 import 'package:fluffy_merge/app/app.dart';
 import 'package:fluffy_merge/core/constants/game_constants.dart';
 import 'package:fluffy_merge/data/local/preferences_provider.dart';
@@ -12,6 +13,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'helpers/save_reader.dart';
+
 /// Real screen, real taps: the power-up UI flow end to end.
 void main() {
   late SharedPreferences prefs;
@@ -25,6 +28,7 @@ void main() {
   Future<FluffyGame> openGame(
     WidgetTester tester, {
     Map<String, Object> saved = const {},
+    bool ads = true,
   }) async {
     SharedPreferences.setMockInitialValues(saved);
     prefs = await SharedPreferences.getInstance();
@@ -33,7 +37,10 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          if (!ads) adServiceProvider.overrideWithValue(const NoAdService()),
+        ],
         child: const FluffyMergeApp(),
       ),
     );
@@ -81,7 +88,7 @@ void main() {
     await advance(tester, 800);
 
     expect(game.creatures.where((c) => c.id == target.id), isEmpty);
-    expect(prefs.getInt(SaveKeys.powerUp(PowerUp.pop)), 2);
+    expect(readSave(prefs).powerUpCount(PowerUp.pop), 2);
     expect(find.byType(PickBanner), findsNothing);
     expect(game.inputLocked, isFalse);
     expect(tester.takeException(), isNull);
@@ -103,11 +110,15 @@ void main() {
     await advance(tester, 500);
 
     expect(game.creatures.length, before);
-    expect(prefs.getInt(SaveKeys.powerUp(PowerUp.sweep)), isNull);
+    expect(readSave(prefs).powerUpCount(PowerUp.sweep), 3);
   });
 
   testWidgets('empty power-up explains how to earn more', (tester) async {
-    await openGame(tester, saved: {SaveKeys.powerUp(PowerUp.grow): 0});
+    await openGame(
+      tester,
+      saved: {SaveKeys.powerUp(PowerUp.grow): 0},
+      ads: false,
+    );
     await tester.tap(find.bySemanticsLabel(RegExp(r'^Grow, 0 left')));
     await advance(tester, 400);
     expect(find.textContaining('No Grows left'), findsOneWidget);
@@ -119,7 +130,7 @@ void main() {
     await tester.tap(find.bySemanticsLabel(RegExp(r'^Shake, 3 left')));
     await advance(tester, 300);
     expect(game.powerUps.shakes.value, 1);
-    expect(prefs.getInt(SaveKeys.powerUp(PowerUp.shake)), 2);
+    expect(readSave(prefs).powerUpCount(PowerUp.shake), 2);
     expect(tester.takeException(), isNull);
   });
 }

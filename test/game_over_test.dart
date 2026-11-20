@@ -14,6 +14,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'helpers/save_reader.dart';
+
 /// Fills the jar past the danger line. Merges are disabled (claims are
 /// released, so the creatures still count as settled), and Lv. 6 puffs are
 /// stacked in a non-overlapping grid that reaches above the jar.
@@ -27,6 +29,13 @@ void _overfill(FluffyGame game) {
       game.spawnCreature(6, Vector2(1.3 + col * 2.45, 12.8 - row * 2.3));
     }
   }
+}
+
+Future<void> _untilFound(WidgetTester tester, Finder f) async {
+  for (var i = 0; i < 200 && f.evaluate().isEmpty; i++) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+  expect(f, findsWidgets);
 }
 
 void main() {
@@ -138,13 +147,12 @@ void main() {
       game.scoring.score.value = 4321;
       game.scoring.coins.value = 6;
       _overfill(game); // no game.ready(): widget tests load by pumping
-      for (
-        var i = 0;
-        i < 200 && find.byType(ResultsScreen).evaluate().isEmpty;
-        i++
-      ) {
-        await tester.pump(const Duration(milliseconds: 50));
+      await _untilFound(tester, find.text('Keep going?'));
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50)); // entrance
       }
+      await tester.tap(find.bySemanticsLabel('No thanks'));
+      await _untilFound(tester, find.byType(ResultsScreen));
       await advance(tester, 1500);
 
       expect(find.byType(ResultsScreen), findsOneWidget);
@@ -153,8 +161,8 @@ void main() {
       expect(find.bySemanticsLabel('Best score 4321'), findsOneWidget);
       expect(find.text('NEW BEST!'), findsOneWidget);
       expect(find.bySemanticsLabel('Coins earned 6'), findsOneWidget);
-      expect(prefs.getInt(SaveKeys.bestScore), 4321);
-      expect(prefs.getInt(SaveKeys.coins), 16);
+      expect(readSave(prefs).bestScore, 4321);
+      expect(readSave(prefs).coins, 16);
 
       await tester.tap(find.bySemanticsLabel('Home'));
       await advance(tester, 1200);
@@ -192,11 +200,11 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Watch Ad for 2X Reward'));
       await advance(tester, 2200); // debug "ad" takes 1.5 s
       expect(find.bySemanticsLabel('Coins earned 16'), findsOneWidget);
-      expect(prefs.getInt(SaveKeys.coins), 58);
+      expect(readSave(prefs).coins, 58);
       // Button is spent.
       await tester.tap(find.bySemanticsLabel('Reward doubled!'));
       await advance(tester, 2000);
-      expect(prefs.getInt(SaveKeys.coins), 58);
+      expect(readSave(prefs).coins, 58);
 
       await tester.tap(find.bySemanticsLabel('Retry'));
       await advance(tester, 1200);

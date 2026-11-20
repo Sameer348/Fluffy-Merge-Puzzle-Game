@@ -7,6 +7,7 @@ import 'package:fluffy_merge/data/local/save_keys.dart';
 import 'package:fluffy_merge/features/gameplay/gameplay_screen.dart';
 import 'package:fluffy_merge/features/home/home_screen.dart';
 import 'package:fluffy_merge/features/home/widgets/home_mascot.dart';
+import 'package:fluffy_merge/widgets/buttons/tile_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -116,10 +117,27 @@ void main() {
       await tester.tap(find.text(label));
       await tester.pumpAndSettle();
       expect(find.text(title), findsWidgets, reason: label);
-      await tester.tap(find.bySemanticsLabel('Back'));
+      // The top-left arrow (Settings also has a Back button at the bottom).
+      await tester.tap(find.bySemanticsLabel('Back').first);
       await tester.pumpAndSettle();
       expect(find.byType(HomeScreen), findsOneWidget);
     }
+  });
+
+  testWidgets('home tiles share the row evenly (with or without a badge)', (
+    tester,
+  ) async {
+    await _boot(tester, const Size(393, 852));
+    await _advance(tester, 2400);
+    final widths = tester
+        .widgetList<TileButton>(find.byType(TileButton))
+        .map((w) => tester.getSize(find.byWidget(w)).width)
+        .toList();
+    expect(widths, hasLength(4));
+    for (final w in widths) {
+      expect(w, closeTo(widths.first, 0.5));
+    }
+    expect(widths.first, greaterThan(70));
   });
 
   testWidgets('HUD fits a 7-digit score and big wallet on a 360×640 phone', (

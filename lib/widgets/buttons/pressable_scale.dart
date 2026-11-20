@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_sizes.dart';
+import '../../core/services/feedback_service.dart';
 
 /// Wraps any widget with the standard "squishy" press feedback
 /// (scale 1.0 → 0.94 while pressed). Used by every tappable surface.
@@ -29,6 +31,20 @@ class PressableScale extends StatefulWidget {
 class _PressableScaleState extends State<PressableScale> {
   bool _pressed = false;
 
+  void _tap() {
+    // Tap sound + light haptic, when the app's providers are available
+    // (plain widget previews/tests without a ProviderScope just skip it).
+    try {
+      ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(feedbackProvider).tap();
+    } on StateError {
+      // No ProviderScope above this widget.
+    }
+    widget.onTap?.call();
+  }
+
   void _set(bool v) {
     if (_pressed != v) setState(() => _pressed = v);
   }
@@ -49,7 +65,7 @@ class _PressableScaleState extends State<PressableScale> {
         onTapDown: enabled ? (_) => _set(true) : null,
         onTapUp: enabled ? (_) => _set(false) : null,
         onTapCancel: enabled ? () => _set(false) : null,
-        onTap: widget.onTap,
+        onTap: enabled ? _tap : null,
         child: AnimatedScale(
           scale: _pressed ? widget.pressedScale : 1.0,
           duration: AppDurations.fast,

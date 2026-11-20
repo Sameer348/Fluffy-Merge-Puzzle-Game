@@ -7,15 +7,21 @@ import '../../app/theme.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/motion.dart';
 import '../../core/utils/responsive.dart';
-import '../../data/repositories/power_up_repository.dart';
-import '../../data/repositories/progress_repository.dart';
+import '../../data/repositories/save_controller.dart';
 import '../../game/fluffy_game.dart';
+import '../../game/models/creature_spec.dart';
 import '../../game/models/power_up.dart';
 import '../../game/models/run_result.dart';
 import '../../widgets/buttons/soft_button.dart';
 import '../../widgets/creature/creature_view.dart';
 import '../../widgets/dialogs/cozy_dialog.dart';
 import '../../widgets/scene/scene_background.dart';
+import '../../core/services/ads/ad_service.dart';
+import '../../core/services/analytics/analytics_service.dart';
+import '../../core/services/feedback_service.dart';
+import '../../core/utils/clock.dart';
+import '../daily_challenge/daily_controller.dart';
+import '../daily_challenge/model/daily_challenge.dart';
 import 'widgets/game_hud.dart';
 import 'widgets/jar_view.dart';
 import 'widgets/overflow_warning.dart';
@@ -42,9 +48,14 @@ class GameplayScreen extends ConsumerStatefulWidget {
 class _GameplayScreenState extends ConsumerState<GameplayScreen>
     with WidgetsBindingObserver {
   FluffyGame? _game;
-  late ProgressRepository _progress;
+
+  /// Saved numbers when the run started (for "new best" and the HUD).
   late int _walletAtStart;
-  Future<RunRecord>? _record;
+  late int _bestAtStart;
+
+  /// Coins already banked into the save during this run.
+  int _coinsBanked = 0;
+  bool _finished = false;
   bool _paused = false;
   bool _leaving = false;
 
@@ -55,12 +66,14 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
   }
 
   /// Leaving the app mid-run (call, home button) opens the pause menu, so
-  /// the run waits for the player instead of continuing unseen.
+  /// the run waits for the player instead of continuing unseen, and banks
+  /// progress so far in case the OS kills the app in the background.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
+      _bank();
       _pause();
     }
   }
@@ -68,53 +81,251 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
   /// POP or GROW while choosing a target; null otherwise.
   PowerUp? _picking;
 
-  PowerUpInventory get _inventory =>
-      ref.read(powerUpInventoryProvider.notifier);
+  /// Captured once: `ref` can't be used in dispose(), where the run is
+  /// finished if the screen goes away some other way.
+  late final SaveController _save = ref.read(saveProvider.notifier);
+  late final DailyController _daily = ref.read(dailyControllerProvider);
+  late final FeedbackService _feedback = ref.read(feedbackProvider);
+  late final AdService _ads = ref.read(adServiceProvider);
+  late final AnalyticsService _analytics = ref.read(analyticsProvider);
+  late final InterstitialPolicy _policy = ref.read(interstitialPolicyProvider);
+  late final DateTime Function() _now = ref.read(clockProvider);
+
+  /// Set when the run finishes: an interstitial may be shown on leaving.
+  bool _interstitialDue = false;
+
+  /// Power-ups already given for a rewarded ad this run (once each).
+  final Set<PowerUp> _freeClaimed = {};
+
+  /// Today's challenge as of the run's start, its stored progress then
+  /// (so repeated updates never double-count), and whether it's done.
+  late final DailyChallenge _challenge;
+  late final int _dailyBaseline;
+  bool _dailyDone = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_game == null) {
-      _progress = ref.read(progressRepositoryProvider);
-      _walletAtStart = _progress.coins;
+      final saved = ref.read(saveProvider);
+      _save; // capture while ref is usable
+      _feedback;
+      _ads;
+      _analytics;
+      _policy;
+      _now;
+      _challenge = _daily.today();
+      final daily = _daily.progressFor(_challenge);
+      _dailyBaseline = daily.progress;
+      _dailyDone = daily.completed;
+      _walletAtStart = saved.coins;
+      _bestAtStart = saved.bestScore;
       _game =
           FluffyGame(
               reduceMotion: reduceMotion(context),
-              bestScore: _progress.bestScore,
+              bestScore: saved.bestScore,
             )
-            ..addPowerUpEarnedListener((p) => _inventory.add(p))
+            ..addPowerUpEarnedListener((p) {
+              _save.addPowerUp(p);
+              _feedback.reward();
+            })
+            ..addLevelReachedListener(_onLevelReached)
             ..addGameOverListener(_onGameOver);
+      final game = _game!;
+      _analytics.log(AnalyticsEvent.gameStarted, {
+        'best_score': saved.bestScore,
+        'games_played': saved.stats.gamesPlayed,
+      });
+      game
+        ..addMergeListener((_) => _checkDaily())
+        ..addScoredMergeListener((a) {
+          _feedback.merge(
+            level: a.event.fromLevel,
+            combo: a.combo,
+            rainbow: a.event.isMaxClear,
+          );
+          _analytics.log(AnalyticsEvent.mergeCreated, {
+            'level': a.event.resultLevel ?? 0,
+            'combo': a.combo,
+          });
+          if (a.combo >= 3) {
+            _analytics.log(AnalyticsEvent.comboCreated, {'combo': a.combo});
+          }
+        })
+        // Impacts above ~2 m/s are audible; ~12 m/s is a full thump.
+        ..addImpactListener((v) => _feedback.bounce((v - 2) / 10))
+        ..drops.addListener(_checkDaily)
+        ..drops.addListener(_feedback.drop);
     }
   }
 
-  /// Saves best score and coins exactly once per run, however it ends.
-  /// SharedPreferences updates its cache synchronously, so readers see the
-  /// new values immediately even though the disk write is async.
-  Future<RunRecord> _recordRun() {
-    final s = _game!.scoring;
-    return _record ??= _progress.recordRun(
-      score: s.score.value,
-      coinsEarned: s.coins.value,
+  RunSnapshot _snapshot() {
+    final g = _game!;
+    return RunSnapshot(
+      score: g.scoring.score.value,
+      highestLevel: g.highestLevel.value,
+      merges: g.merges.value,
+      bestCombo: g.scoring.bestCombo,
+      drops: g.drops.value,
     );
   }
 
+  /// Live check after every merge/drop: celebrate the moment today's
+  /// challenge is done (saved immediately so it can't be lost).
+  void _checkDaily() {
+    if (_dailyDone) return;
+    final done = _daily.applyRun(
+      _challenge,
+      _dailyBaseline,
+      _snapshot(),
+      persistProgress: false,
+    );
+    if (!done) return;
+    _dailyDone = true;
+    _feedback.reward();
+    _analytics.log(AnalyticsEvent.dailyChallengeCompleted, {
+      'kind': _challenge.kind.name,
+      'target': _challenge.target,
+    });
+    final game = _game!;
+    if (!game.isLoaded) return;
+    game.showPopup(
+      'Daily complete!',
+      sub: 'Claim it on the Daily screen',
+      color: AppColors.sunshineDeep,
+      at: Vector2(game.size.x / 2, game.size.y * 0.36),
+      scale: 1.1,
+      lifetime: 2.0,
+    );
+  }
+
+  /// First time ever a creature level appears: unlock it in the
+  /// Collection and celebrate (levels above the starting few only, so the
+  /// first run isn't a wall of popups).
+  void _onLevelReached(int level) {
+    final isNew = _save.unlockLevel(level);
+    final game = _game;
+    if (!isNew || game == null || level <= 3 || !game.isLoaded) return;
+    game.showPopup(
+      'New puff!',
+      sub: CreatureCatalog.byLevel(level).name,
+      color: AppColors.candyPink,
+      at: Vector2(game.size.x / 2, game.size.y * 0.32),
+      scale: 1.1,
+      lifetime: 1.6,
+    );
+  }
+
+  /// Banks best score and coins earned so far. Called when the app is
+  /// backgrounded and when the run ends; only the not-yet-banked coins are
+  /// added, so calling it repeatedly never double-counts.
+  void _bank() {
+    final game = _game;
+    if (game == null) return;
+    final s = game.scoring;
+    _save.bankRun(
+      score: s.score.value,
+      coinsDelta: s.coins.value - _coinsBanked,
+    );
+    _coinsBanked = s.coins.value;
+    _daily.applyRun(_challenge, _dailyBaseline, _snapshot());
+  }
+
+  /// Ends the run in the save: final bank plus lifetime stats (once).
+  void _finishRun() {
+    if (_finished) return;
+    _finished = true;
+    _bank();
+    final game = _game!;
+    _save.finishRun(
+      RunStats(
+        merges: game.merges.value,
+        drops: game.drops.value,
+        coinsEarned: game.scoring.coins.value,
+        bestCombo: game.scoring.bestCombo,
+        highestLevel: game.highestLevel.value,
+      ),
+    );
+    final saved = _save.current;
+    _interstitialDue = _policy.onRunFinished(
+      adsRemoved: saved.adsRemoved,
+      lifetimeGames: saved.stats.gamesPlayed,
+      now: _now(),
+    );
+    _analytics.log(AnalyticsEvent.gameOver, {
+      'score': game.scoring.score.value,
+      'level': game.highestLevel.value,
+      'merges': game.merges.value,
+      'seconds': game.clock.round(),
+      'continued': game.revives,
+      'ended_by': game.isGameOver ? 'overflow' : 'quit',
+    });
+  }
+
+  /// Shows the interstitial the policy asked for (if any) before leaving
+  /// mid-run via the pause menu.
+  Future<void> _maybeInterstitial() async {
+    if (_interstitialDue && _ads.interstitialAvailable) {
+      _interstitialDue = false;
+      await _ads.showInterstitial();
+    }
+  }
+
+  /// Once per run: watch an ad to clear the top of the jar and keep going.
+  /// Returns true if the run continues.
+  Future<bool> _offerContinue() async {
+    final game = _game!;
+    if (game.revives > 0 || !_ads.rewardedAvailable || !mounted) return false;
+    final ok = await showCozyConfirm(
+      context,
+      title: 'Keep going?',
+      message:
+          'Watch a short ad to clear the top of the jar and keep playing. '
+          'Once per run.',
+      confirmLabel: 'Watch ad',
+      cancelLabel: 'No thanks',
+      preview: const Icon(
+        Icons.ondemand_video_rounded,
+        size: 56,
+        color: AppColors.candyPink,
+      ),
+      confirmColor: CandyColor.green,
+    );
+    if (!ok || !mounted) return false;
+    final earned = await _ads.showRewarded(RewardPlacement.continueRun);
+    if (!earned || !mounted) return false;
+    _analytics.log(AnalyticsEvent.rewardedAdWatched, {
+      'placement': RewardPlacement.continueRun.id,
+    });
+    game.revive();
+    _feedback.reward();
+    return true;
+  }
+
   Future<void> _onGameOver() async {
+    _feedback.gameOver();
     if (_leaving || !mounted) return;
     _leaving = true;
     _stopPicking();
     final game = _game!;
-    final record = await _recordRun();
+    if (await _offerContinue()) {
+      _leaving = false;
+      return;
+    }
     if (!mounted) return;
+    _finishRun();
+    final score = game.scoring.score.value;
     final result = RunResult(
-      score: game.scoring.score.value,
-      bestScore: record.bestScore,
-      isNewBest: record.isNewBest,
+      score: score,
+      bestScore: score > _bestAtStart ? score : _bestAtStart,
+      isNewBest: score > _bestAtStart,
       highestLevel: game.highestLevel.value,
       coinsEarned: game.scoring.coins.value,
       merges: game.merges.value,
       drops: game.drops.value,
       bestCombo: game.scoring.bestCombo,
       seconds: game.clock,
+      interstitialDue: _interstitialDue,
     );
     await Navigator.of(context)
         .pushReplacementNamed(AppRoutes.results, arguments: result);
@@ -137,13 +348,15 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
         game.resumeEngine();
       case PauseChoice.restart:
         _leaving = true;
-        await _recordRun();
+        _finishRun();
+        await _maybeInterstitial();
         if (mounted) {
           await Navigator.of(context).pushReplacementNamed(AppRoutes.game);
         }
       case PauseChoice.home:
         _leaving = true;
-        await _recordRun();
+        _finishRun();
+        await _maybeInterstitial();
         if (mounted) Navigator.of(context).pop();
     }
   }
@@ -167,13 +380,16 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
       return;
     }
     _stopPicking();
-    if (_inventory.count(p) <= 0) {
-      _toast(_howToEarn(p));
+    if (ref.read(saveProvider).powerUpCount(p) <= 0) {
+      if (!await _offerFreePowerUp(p)) _toast(_howToEarn(p));
       return;
     }
     switch (p) {
       case PowerUp.shake:
-        if (_inventory.consume(p)) game.powerUps.shake();
+        if (_save.consumePowerUp(p)) {
+          game.powerUps.shake();
+          _used(p);
+        }
       case PowerUp.sweep:
         await _sweep();
       case PowerUp.pop:
@@ -200,7 +416,10 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
       confirmLabel: 'Sweep',
     );
     game.powerUps.highlight(null);
-    if (ok && _inventory.consume(PowerUp.sweep)) game.powerUps.sweep();
+    if (ok && _save.consumePowerUp(PowerUp.sweep)) {
+      game.powerUps.sweep();
+      _used(PowerUp.sweep);
+    }
   }
 
   Future<void> _onPick(Vector2 px) async {
@@ -210,7 +429,10 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     final c = game.powerUps.creatureAtPixel(px, forPowerUp: p);
     if (c == null) return; // missed: stay in pick mode
     if (p == PowerUp.grow) {
-      if (game.powerUps.grow(c)) _inventory.consume(p);
+      if (game.powerUps.grow(c)) {
+        _save.consumePowerUp(p);
+        _used(p);
+      }
       _stopPicking();
       return;
     }
@@ -222,8 +444,61 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
       confirmLabel: 'Pop!',
       preview: CreatureView(spec: c.spec, size: 84),
     );
-    if (ok && game.powerUps.pop(c)) _inventory.consume(p);
+    if (ok && game.powerUps.pop(c)) {
+      _save.consumePowerUp(p);
+      _used(p);
+    }
     _stopPicking();
+  }
+
+  void _used(PowerUp p) {
+    _feedback.powerUp();
+    _analytics.log(AnalyticsEvent.powerUpUsed, {'type': p.name});
+  }
+
+  /// Out of [p]: offer one for a rewarded ad (once per power-up per run).
+  /// Returns false if no offer was made (so the "how to earn" tip shows).
+  Future<bool> _offerFreePowerUp(PowerUp p) async {
+    if (!_ads.rewardedAvailable || _freeClaimed.contains(p)) return false;
+    final ok = await _confirmPaused(
+      title: 'Free ${p.label}?',
+      message: 'Out of ${p.label}s. Watch a short ad to get 1 free!',
+      confirmLabel: 'Watch ad',
+      cancelLabel: 'No thanks',
+      preview: PowerUpIcon(kind: p, size: 64),
+      confirmColor: CandyColor.green,
+    );
+    if (!ok || !mounted) return true;
+    final game = _game!;
+    game
+      ..frozen = true
+      ..inputLocked = true;
+    final earned = await _ads.showRewarded(RewardPlacement.freePowerUp);
+    if (!mounted) return true;
+    game
+      ..frozen = false
+      ..inputLocked = false;
+    if (!earned) return true;
+    _freeClaimed.add(p);
+    _save.addPowerUp(p);
+    _feedback.reward();
+    _analytics.log(AnalyticsEvent.rewardedAdWatched, {
+      'placement': RewardPlacement.freePowerUp.id,
+      'power_up': p.name,
+    });
+    // A popup in the jar, not a snackbar: that would cover the power-up
+    // bar right when the player wants to use what they just got.
+    if (game.isLoaded) {
+      game.showPopup(
+        '+1 ${p.label}',
+        sub: 'Free power-up!',
+        color: AppColors.candyGreenTop,
+        at: Vector2(game.size.x / 2, game.size.y * 0.36),
+        scale: 1.1,
+        lifetime: 1.6,
+      );
+    }
+    return true;
   }
 
   void _stopPicking() {
@@ -241,7 +516,9 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
     required String title,
     required String message,
     required String confirmLabel,
+    String cancelLabel = 'Cancel',
     Widget? preview,
+    CandyColor confirmColor = CandyColor.pink,
   }) async {
     final game = _game!;
     game
@@ -252,8 +529,9 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
       title: title,
       message: message,
       confirmLabel: confirmLabel,
+      cancelLabel: cancelLabel,
       preview: preview,
-      confirmColor: CandyColor.pink,
+      confirmColor: confirmColor,
     );
     if (mounted) {
       game
@@ -297,7 +575,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _recordRun(); // fallback if the route went away some other way
+    _finishRun(); // fallback if the route went away some other way
     _game?.disposeSession();
     super.dispose();
   }
@@ -308,7 +586,7 @@ class _GameplayScreenState extends ConsumerState<GameplayScreen>
   @override
   Widget build(BuildContext context) {
     final game = _game!;
-    final counts = ref.watch(powerUpInventoryProvider);
+    final counts = ref.watch(powerUpCountsProvider);
     // System back opens the pause menu instead of silently ending the run.
     return PopScope(
       canPop: false,

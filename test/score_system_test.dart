@@ -1,9 +1,7 @@
-import 'package:fluffy_merge/data/repositories/progress_repository.dart';
 import 'package:fluffy_merge/game/models/merge_event.dart';
 import 'package:fluffy_merge/game/systems/score_system.dart';
 import 'package:flame/components.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 MergeEvent _merge(int level, double t, {bool rainbow = false}) => MergeEvent(
   fromLevel: level,
@@ -106,23 +104,6 @@ void main() {
       first.onMerge(_merge(5, 0));
       expect(first.takeNewBest(), isFalse);
       first.dispose();
-    });
-  });
-
-  group('ProgressRepository', () {
-    test('records best score and adds coins to the wallet', () async {
-      SharedPreferences.setMockInitialValues({});
-      final repo = ProgressRepository(await SharedPreferences.getInstance());
-      var r = await repo.recordRun(score: 500, coinsEarned: 7);
-      expect(r.isNewBest, isTrue);
-      expect(repo.bestScore, 500);
-      expect(repo.coins, 7);
-
-      r = await repo.recordRun(score: 300, coinsEarned: 3);
-      expect(r.isNewBest, isFalse);
-      expect(r.bestScore, 500);
-      expect(repo.bestScore, 500);
-      expect(repo.coins, 10);
     });
   });
 }

@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../core/constants/app_sizes.dart';
-import '../features/achievements/achievements_screen.dart';
 import '../features/collection/collection_screen.dart';
 import '../features/daily_challenge/daily_challenge_screen.dart';
 import '../features/game_over/results_screen.dart';
 import '../features/gameplay/gameplay_screen.dart';
 import '../features/home/home_screen.dart';
-import '../features/leaderboard/leaderboard_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/shop/shop_screen.dart';
 import '../features/splash/splash_screen.dart';
@@ -25,8 +23,6 @@ abstract final class AppRoutes {
   static const collection = '/collection';
   static const shop = '/shop';
   static const settings = '/settings';
-  static const leaderboard = '/leaderboard';
-  static const achievements = '/achievements';
 
   /// Needs a [RunResult] as the route argument.
   static const results = '/results';
@@ -41,8 +37,6 @@ abstract final class AppRoutes {
       collection => const CollectionScreen(),
       shop => const ShopScreen(),
       AppRoutes.settings => const SettingsScreen(),
-      leaderboard => const LeaderboardScreen(),
-      achievements => const AchievementsScreen(),
       results when settings.arguments is RunResult => ResultsScreen(
         result: settings.arguments! as RunResult,
       ),

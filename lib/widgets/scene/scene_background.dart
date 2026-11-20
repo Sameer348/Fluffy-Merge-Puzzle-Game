@@ -3,9 +3,12 @@ import 'dart:ui' show Picture, PictureRecorder;
 
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/motion.dart';
+import '../../features/shop/model/cosmetics.dart';
+import '../../features/shop/shop_controller.dart';
 
 /// Which layout of the storybook scene to paint.
 enum SceneVariant {
@@ -22,16 +25,24 @@ enum SceneVariant {
 ///
 /// Static layers are cached in a [Picture] per size; only the clouds and
 /// balloons move, driven by a ticker → repaint (no widget rebuilds).
-class SceneBackground extends StatefulWidget {
-  const SceneBackground({super.key, this.variant = SceneVariant.menu});
+///
+/// The palette comes from the equipped background in the shop unless a
+/// [theme] is given (e.g. shop previews).
+class SceneBackground extends ConsumerStatefulWidget {
+  const SceneBackground({
+    super.key,
+    this.variant = SceneVariant.menu,
+    this.theme,
+  });
 
   final SceneVariant variant;
+  final SceneTheme? theme;
 
   @override
-  State<SceneBackground> createState() => _SceneBackgroundState();
+  ConsumerState<SceneBackground> createState() => _SceneBackgroundState();
 }
 
-class _SceneBackgroundState extends State<SceneBackground>
+class _SceneBackgroundState extends ConsumerState<SceneBackground>
     with SingleTickerProviderStateMixin {
   final _time = ValueNotifier<double>(0);
   late final Ticker _ticker = createTicker(
@@ -60,7 +71,11 @@ class _SceneBackgroundState extends State<SceneBackground>
     return IgnorePointer(
       child: RepaintBoundary(
         child: CustomPaint(
-          painter: _ScenePainter(_time, widget.variant),
+          painter: _ScenePainter(
+            _time,
+            widget.variant,
+            widget.theme ?? ref.watch(equippedSceneProvider),
+          ),
           size: Size.infinite,
         ),
       ),
@@ -69,10 +84,11 @@ class _SceneBackgroundState extends State<SceneBackground>
 }
 
 class _ScenePainter extends CustomPainter {
-  _ScenePainter(this.time, this.variant) : super(repaint: time);
+  _ScenePainter(this.time, this.variant, this.theme) : super(repaint: time);
 
   final ValueNotifier<double> time;
   final SceneVariant variant;
+  final SceneTheme theme;
 
   // Cached static layers, shared across instances, keyed by size+variant.
   static final Map<String, Picture> _cache = {};
@@ -81,7 +97,8 @@ class _ScenePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
-    final key = '${variant.name}:${size.width.round()}x${size.height.round()}';
+    final key =
+        '${theme.id}:${variant.name}:${size.width.round()}x${size.height.round()}';
     if (_cache.length > 6) {
       for (final pic in _cache.values) {
         pic.dispose();
@@ -118,7 +135,7 @@ class _ScenePainter extends CustomPainter {
     _p.shader = LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
-      colors: const [AppColors.skyTop, AppColors.skyMid, AppColors.skyHorizon],
+      colors: [theme.skyTop, theme.skyMid, theme.skyHorizon],
       stops: const [0, 0.5, 0.85],
     ).createShader(Offset.zero & s);
     c.drawRect(Offset.zero & s, _p);
@@ -128,8 +145,8 @@ class _ScenePainter extends CustomPainter {
     _p.shader =
         RadialGradient(
           colors: [
-            const Color(0xFFFFF6D6).withValues(alpha: 0.9),
-            const Color(0x00FFF6D6),
+            theme.sun.withValues(alpha: 0.9),
+            theme.sun.withValues(alpha: 0),
           ],
         ).createShader(
           Rect.fromCircle(center: Offset(w * 0.85, h * 0.08), radius: w * 0.55),
@@ -145,7 +162,8 @@ class _ScenePainter extends CustomPainter {
 
     // Far hills.
     final hillTop = variant == SceneVariant.menu ? h * 0.7 : h * 0.8;
-    _hills(c, s, hillTop, AppColors.hillFar, 3, 0.04);
+    if (theme.stars) _stars(c, s);
+    _hills(c, s, hillTop, theme.hillFar, 3, 0.04);
   }
 
   // ---------------------------------------------------------------------------
@@ -154,7 +172,7 @@ class _ScenePainter extends CustomPainter {
   void _paintFront(Canvas c, Size s) {
     final w = s.width, h = s.height;
     if (variant == SceneVariant.menu) {
-      _hills(c, s, h * 0.78, AppColors.hillNear, 2, 0.035);
+      _hills(c, s, h * 0.78, theme.hillNear, 2, 0.035);
       _flowers(c, s, h * 0.8, h * 0.95, 26, 11);
       _cloudBank(c, s, h * 0.93);
     } else {
@@ -169,7 +187,7 @@ class _ScenePainter extends CustomPainter {
       _p.shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: const [AppColors.hillNear, AppColors.grassDark],
+        colors: [theme.hillNear, theme.grassDark],
       ).createShader(Rect.fromLTWH(0, top, w, h - top));
       c.drawPath(mound, _p);
       _p.shader = null;
@@ -322,6 +340,26 @@ class _ScenePainter extends CustomPainter {
   // ---------------------------------------------------------------------------
   // Moving layer: clouds drifting, balloons bobbing.
 
+  /// Tiny four-point stars scattered across the upper sky.
+  void _stars(Canvas c, Size s) {
+    final rnd = math.Random(42);
+    _p.color = const Color(0xCCFFFFFF);
+    for (var i = 0; i < 28; i++) {
+      final at = Offset(
+        rnd.nextDouble() * s.width,
+        rnd.nextDouble() * s.height * 0.55,
+      );
+      final r = s.width * (0.004 + rnd.nextDouble() * 0.006);
+      final star = Path()
+        ..moveTo(at.dx, at.dy - r * 2)
+        ..quadraticBezierTo(at.dx, at.dy, at.dx + r * 2, at.dy)
+        ..quadraticBezierTo(at.dx, at.dy, at.dx, at.dy + r * 2)
+        ..quadraticBezierTo(at.dx, at.dy, at.dx - r * 2, at.dy)
+        ..quadraticBezierTo(at.dx, at.dy, at.dx, at.dy - r * 2);
+      c.drawPath(star, _p);
+    }
+  }
+
   void _drawMoving(Canvas c, Size s, double t) {
     final w = s.width, h = s.height;
     const clouds = [
@@ -426,5 +464,6 @@ class _ScenePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ScenePainter old) => old.variant != variant;
+  bool shouldRepaint(_ScenePainter old) =>
+      old.variant != variant || old.theme != theme;
 }

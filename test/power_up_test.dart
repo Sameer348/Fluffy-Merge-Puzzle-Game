@@ -1,7 +1,8 @@
 import 'package:fluffy_merge/core/constants/game_constants.dart';
 import 'package:fluffy_merge/data/local/preferences_provider.dart';
 import 'package:fluffy_merge/data/local/save_keys.dart';
-import 'package:fluffy_merge/data/repositories/power_up_repository.dart';
+import 'package:fluffy_merge/data/local/save_data.dart';
+import 'package:fluffy_merge/data/repositories/save_controller.dart';
 import 'package:fluffy_merge/game/fluffy_game.dart';
 import 'package:fluffy_merge/game/models/creature_spec.dart';
 import 'package:fluffy_merge/game/models/power_up.dart';
@@ -11,6 +12,8 @@ import 'package:flame_test/flame_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'helpers/save_reader.dart';
 
 double _r(int l) =>
     CreatureCatalog.byLevel(l).radius * PhysicsConfig.collisionScale;
@@ -24,7 +27,7 @@ Future<void> _settle(FluffyGame game, double seconds) async {
 }
 
 void main() {
-  group('PowerUpInventory', () {
+  group('Power-up stock (save controller)', () {
     Future<ProviderContainer> container([
       Map<String, Object> saved = const {},
     ]) async {
@@ -39,28 +42,28 @@ void main() {
 
     test('new players start with 3 of each', () async {
       final c = await container();
-      expect(c.read(powerUpInventoryProvider), {
-        for (final p in PowerUp.values) p: PowerUpInventory.starterCount,
+      expect(c.read(powerUpCountsProvider), {
+        for (final p in PowerUp.values) p: SaveData.starterPowerUps,
       });
     });
 
     test('consume spends one, persists, and never goes below 0', () async {
       final c = await container({SaveKeys.powerUp(PowerUp.pop): 1});
-      final inv = c.read(powerUpInventoryProvider.notifier);
-      expect(inv.consume(PowerUp.pop), isTrue);
-      expect(inv.consume(PowerUp.pop), isFalse);
-      expect(c.read(powerUpInventoryProvider)[PowerUp.pop], 0);
-      final prefs = c.read(sharedPreferencesProvider);
-      expect(prefs.getInt(SaveKeys.powerUp(PowerUp.pop)), 0);
+      final save = c.read(saveProvider.notifier);
+      expect(save.consumePowerUp(PowerUp.pop), isTrue);
+      expect(save.consumePowerUp(PowerUp.pop), isFalse);
+      expect(c.read(powerUpCountsProvider)[PowerUp.pop], 0);
+      await save.flush();
+      expect(
+        readSave(c.read(sharedPreferencesProvider)).powerUpCount(PowerUp.pop),
+        0,
+      );
     });
 
     test('add is capped', () async {
       final c = await container({SaveKeys.powerUp(PowerUp.grow): 98});
-      c.read(powerUpInventoryProvider.notifier).add(PowerUp.grow, 5);
-      expect(
-        c.read(powerUpInventoryProvider)[PowerUp.grow],
-        PowerUpInventory.maxCount,
-      );
+      c.read(saveProvider.notifier).addPowerUp(PowerUp.grow, 5);
+      expect(c.read(powerUpCountsProvider)[PowerUp.grow], SaveData.maxPowerUps);
     });
   });
 

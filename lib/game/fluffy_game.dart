@@ -200,12 +200,18 @@ class FluffyGame extends Forge2DGame<JarWorld> implements TouchListener {
       velocity: velocity,
       reduceMotion: reduceMotion,
       onMounted: creatures.add,
+      onHit: _onCreatureHit,
       onRemoved: _onCreatureRemoved,
       fromMerge: fromMerge,
       seed: _seed * 7919 + id,
     );
     world.add(creature);
     if (level > highestLevel.value) highestLevel.value = level;
+    if (_levelsSeen.add(level)) {
+      for (final l in List.of(_levelListeners)) {
+        l(level);
+      }
+    }
     return creature;
   }
 
@@ -345,6 +351,36 @@ class FluffyGame extends Forge2DGame<JarWorld> implements TouchListener {
     overflowCountdown.value = overflow.isWarning ? overflow.secondsLeft : null;
   }
 
+  /// How far below the danger line a continue clears (world units; the
+  /// jar is 14 tall, so about a quarter of it).
+  static const double reviveClearDepth = 3.5;
+
+  /// Keeps a finished run going (rewarded "continue"): clears the creatures
+  /// near the top, resets the overflow timer and hands control back.
+  /// Returns how many creatures were cleared; 0 (and no change) if the run
+  /// isn't over.
+  int revive() {
+    if (!isGameOver) return 0;
+    final cleared = powerUps.clearAbove(
+      DangerLineComponent.y + reviveClearDepth,
+    );
+    overflow.reset();
+    overflowCountdown.value = null;
+    _gameOverAt = null;
+    _slowMoReal = 0;
+    _gameOverAnnounced = false;
+    frozen = false;
+    inputLocked = false;
+    for (final c in creatures) {
+      c.react(CreatureExpression.happy, 0.8);
+    }
+    revives++;
+    return cleared;
+  }
+
+  /// Continues used this run.
+  int revives = 0;
+
   /// Slow-motion factor during the ending: eases from 1 down to 0.15.
   double get _timeScale {
     if (!isGameOver) return 1;
@@ -374,6 +410,34 @@ class FluffyGame extends Forge2DGame<JarWorld> implements TouchListener {
 
   final Set<Object> _rewardsGiven = {};
   final List<void Function(PowerUp)> _earnListeners = [];
+
+  final Set<int> _levelsSeen = {};
+  final List<void Function(int level)> _levelListeners = [];
+
+  /// Called the first time each creature level appears in this run
+  /// (drops, merges, GROW). The UI uses it to unlock Collection entries.
+  final List<void Function(ScoreAward award)> _awardListeners = [];
+
+  /// Called after each merge has been scored (combo known), e.g. for
+  /// merge sounds and haptics.
+  void addScoredMergeListener(void Function(ScoreAward award) l) =>
+      _awardListeners.add(l);
+
+  final List<void Function(double speed)> _impactListeners = [];
+
+  /// Creature impacts (approach speed in m/s), e.g. for bounce sounds.
+  /// Called from the physics step's event dispatch.
+  void addImpactListener(void Function(double speed) l) =>
+      _impactListeners.add(l);
+
+  void _onCreatureHit(double speed) {
+    for (final l in _impactListeners) {
+      l(speed);
+    }
+  }
+
+  void addLevelReachedListener(void Function(int level) l) =>
+      _levelListeners.add(l);
 
   /// Subscribe to power-ups earned during play (the UI adds them to the
   /// saved inventory).
@@ -498,6 +562,9 @@ class FluffyGame extends Forge2DGame<JarWorld> implements TouchListener {
     final award = scoring.onMerge(e);
     _mergeEffects(e, award);
     _checkRewards(e, award);
+    for (final l in List.of(_awardListeners)) {
+      l(award);
+    }
     final big = award.combo >= 4 || e.isMaxClear;
     showPopup(
       award.label,
@@ -622,6 +689,9 @@ class FluffyGame extends Forge2DGame<JarWorld> implements TouchListener {
     scoring.dispose();
     powerUps.dispose();
     _earnListeners.clear();
+    _levelListeners.clear();
+    _awardListeners.clear();
+    _impactListeners.clear();
     mergeDetector.clear();
     if (isLoaded) world.disposePhysics();
   }

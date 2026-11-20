@@ -157,6 +157,20 @@ class PowerUpSystem {
     shakes.value++;
   }
 
+  /// Continue-after-game-over: poofs every creature whose top is above
+  /// [y] (world units, down is +). Returns how many were cleared.
+  int clearAbove(double y) {
+    final targets = game.creatures
+        .where(
+          (c) => c.isMounted && !c.claimedForMerge && c.y - c.bodyRadius < y,
+        )
+        .toList();
+    for (final c in targets) {
+      _poof(c, small: false);
+    }
+    return targets.length;
+  }
+
   void _poof(CreatureComponent c, {required bool small}) {
     final at = c.body.position.clone();
     final spec = c.spec;

@@ -62,17 +62,11 @@ class _PowerUpButton extends StatelessWidget {
   final VoidCallback? onTap;
 
   /// Glossy disc colours (top, bottom).
-  static const _colors = {
-    PowerUp.sweep: (Color(0xFFFFE07A), Color(0xFFF6A93B)),
-    PowerUp.pop: (Color(0xFF8FB4FF), Color(0xFF3F5FD6)),
-    PowerUp.grow: (Color(0xFF9EEB8A), Color(0xFF3DB54A)),
-    PowerUp.shake: (Color(0xFFC9A8FF), Color(0xFF7B4FE0)),
-  };
 
   @override
   Widget build(BuildContext context) {
     final label = kind.label;
-    final (top, bottom) = _colors[kind]!;
+    final (top, bottom) = powerUpColors[kind]!;
     final labelStyle = AppText.display(
       size * 0.26,
       color: AppColors.white,
@@ -128,7 +122,7 @@ class _PowerUpButton extends StatelessWidget {
                             ),
                         ],
                       ),
-                      child: CustomPaint(painter: _IconPainter(kind)),
+                      child: CustomPaint(painter: PowerUpIconPainter(kind)),
                     ),
                     // Gloss.
                     Positioned(
@@ -190,9 +184,49 @@ class _PowerUpButton extends StatelessWidget {
   }
 }
 
+/// Glossy disc colours (top, bottom) per power-up.
+const Map<PowerUp, (Color, Color)> powerUpColors = {
+  PowerUp.sweep: (Color(0xFFFFE07A), Color(0xFFF6A93B)),
+  PowerUp.pop: (Color(0xFF8FB4FF), Color(0xFF3F5FD6)),
+  PowerUp.grow: (Color(0xFF9EEB8A), Color(0xFF3DB54A)),
+  PowerUp.shake: (Color(0xFFC9A8FF), Color(0xFF7B4FE0)),
+};
+
+/// A small glossy power-up disc (e.g. reward rows, shop), same art as the
+/// gameplay buttons.
+class PowerUpIcon extends StatelessWidget {
+  const PowerUpIcon({super.key, required this.kind, required this.size});
+
+  final PowerUp kind;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final (top, bottom) = powerUpColors[kind]!;
+    return Semantics(
+      label: kind.label,
+      excludeSemantics: true,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: AppColors.white, width: size * 0.07),
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [top, bottom],
+          ),
+        ),
+        child: CustomPaint(painter: PowerUpIconPainter(kind)),
+      ),
+    );
+  }
+}
+
 /// Vector icons: broom, bomb, up-arrow, swirl.
-class _IconPainter extends CustomPainter {
-  const _IconPainter(this.kind);
+class PowerUpIconPainter extends CustomPainter {
+  const PowerUpIconPainter(this.kind);
   final PowerUp kind;
 
   @override
@@ -305,5 +339,5 @@ class _IconPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_IconPainter old) => old.kind != kind;
+  bool shouldRepaint(PowerUpIconPainter old) => old.kind != kind;
 }

@@ -1,56 +1,36 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../core/constants/app_colors.dart';
 import '../core/constants/app_sizes.dart';
 
 /// Rounded, friendly type: Fredoka for display/titles, Nunito for body.
+///
+/// Both ship inside the app (assets/fonts, SIL Open Font License), so text
+/// renders correctly on first launch, offline, with no font downloads.
 abstract final class AppText {
-  /// When false, styles use the family names directly instead of the
-  /// google_fonts loader. Tests turn this off (no network, and a failed
-  /// font fetch surfaces as an error); Phase 18 bundles the font files so
-  /// release builds never fetch fonts at runtime either.
-  static bool useGoogleFonts = true;
+  static const String displayFamily = 'Fredoka';
+  static const String bodyFamily = 'Nunito';
 
   static TextStyle display(double size, {Color color = AppColors.textDark}) =>
-      _style('Fredoka', GoogleFonts.fredoka, size, FontWeight.w600, color, 1.1);
+      TextStyle(
+        fontFamily: displayFamily,
+        fontSize: size,
+        fontWeight: FontWeight.w600,
+        color: color,
+        height: 1.1,
+      );
 
   static TextStyle body(
     double size, {
     Color color = AppColors.textDark,
     FontWeight weight = FontWeight.w700,
-  }) => _style('Nunito', GoogleFonts.nunito, size, weight, color, 1.3);
-
-  static TextStyle _style(
-    String family,
-    TextStyle Function({
-      double? fontSize,
-      FontWeight? fontWeight,
-      Color? color,
-      double? height,
-    })
-    google,
-    double size,
-    FontWeight weight,
-    Color color,
-    double height,
-  ) {
-    if (useGoogleFonts) {
-      return google(
-        fontSize: size,
-        fontWeight: weight,
-        color: color,
-        height: height,
-      );
-    }
-    return TextStyle(
-      fontFamily: family,
-      fontSize: size,
-      fontWeight: weight,
-      color: color,
-      height: height,
-    );
-  }
+  }) => TextStyle(
+    fontFamily: bodyFamily,
+    fontSize: size,
+    fontWeight: weight,
+    color: color,
+    height: 1.3,
+  );
 }
 
 abstract final class AppTheme {

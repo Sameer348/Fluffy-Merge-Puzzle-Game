@@ -5,8 +5,10 @@ import '../../app/routes.dart';
 import '../../app/theme.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/services/ads/ad_service.dart';
+import '../../core/services/analytics/analytics_service.dart';
+import '../../core/services/feedback_service.dart';
 import '../../core/utils/responsive.dart';
-import '../../data/repositories/progress_repository.dart';
+import '../../data/repositories/save_controller.dart';
 import '../../game/models/creature_spec.dart';
 import '../../game/models/run_result.dart';
 import '../../widgets/buttons/soft_button.dart';
@@ -45,12 +47,16 @@ class _ResultsScreenState extends ConsumerState<ResultsScreen> {
     setState(() => _watching = true);
     final ok = await ref
         .read(adServiceProvider)
-        .showRewarded(placement: 'results_2x');
+        .showRewarded(RewardPlacement.doubleCoins);
+    if (ok) {
+      ref.read(analyticsProvider).log(AnalyticsEvent.rewardedAdWatched, {
+        'placement': RewardPlacement.doubleCoins.id,
+      });
+    }
     if (!mounted) return;
     if (ok) {
-      await ref
-          .read(progressRepositoryProvider)
-          .addCoins(widget.result.coinsEarned);
+      ref.read(saveProvider.notifier).addCoins(widget.result.coinsEarned);
+      ref.read(feedbackProvider).reward();
     }
     if (!mounted) return;
     setState(() {
@@ -59,9 +65,26 @@ class _ResultsScreenState extends ConsumerState<ResultsScreen> {
     });
   }
 
-  void _retry() => Navigator.of(context).pushReplacementNamed(AppRoutes.game);
+  bool _leaving = false;
 
-  void _home() {
+  /// Shows the due interstitial (if any) before leaving, once.
+  Future<bool> _beforeLeaving() async {
+    if (_leaving) return false;
+    _leaving = true;
+    final ads = ref.read(adServiceProvider);
+    if (widget.result.interstitialDue && ads.interstitialAvailable) {
+      await ads.showInterstitial();
+    }
+    return mounted;
+  }
+
+  Future<void> _retry() async {
+    if (!await _beforeLeaving() || !mounted) return;
+    await Navigator.of(context).pushReplacementNamed(AppRoutes.game);
+  }
+
+  Future<void> _home() async {
+    if (!await _beforeLeaving() || !mounted) return;
     ref.invalidate(playerSummaryProvider);
     Navigator.of(context).popUntil((r) => r.isFirst);
   }

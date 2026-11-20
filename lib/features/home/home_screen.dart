@@ -11,6 +11,8 @@ import '../../widgets/common/floating_particles.dart';
 import '../../widgets/common/staggered_entrance.dart';
 import '../../widgets/scene/scene_background.dart';
 import '../../widgets/score/stat_chip.dart';
+import '../../data/repositories/save_controller.dart';
+import '../daily_challenge/daily_controller.dart';
 import 'home_providers.dart';
 import 'widgets/game_logo.dart';
 import 'widgets/home_mascot.dart';
@@ -25,6 +27,10 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summary = ref.watch(playerSummaryProvider);
+    final dailyReward = ref.watch(dailyViewProvider.select((v) => v.hasReward));
+    final newPuffs = ref.watch(
+      saveProvider.select((s) => s.newLevels.isNotEmpty),
+    );
 
     Future<void> go(String route) async {
       await Navigator.of(context).pushNamed(route);
@@ -128,6 +134,9 @@ class HomeScreen extends ConsumerWidget {
                               icon: icon,
                               color: color,
                               height: r.s(86),
+                              badge:
+                                  (route == AppRoutes.daily && dailyReward) ||
+                                  (route == AppRoutes.collection && newPuffs),
                               onTap: () => go(route),
                             ),
                           ),
@@ -140,32 +149,13 @@ class HomeScreen extends ConsumerWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      for (final (icon, label, route) in const [
-                        (
-                          Icons.school_rounded,
-                          'How to play',
-                          AppRoutes.tutorial,
-                        ),
-                        (
-                          Icons.emoji_events_rounded,
-                          'Leaderboard',
-                          AppRoutes.leaderboard,
-                        ),
-                        (
-                          Icons.military_tech_rounded,
-                          'Achievements',
-                          AppRoutes.achievements,
-                        ),
-                      ]) ...[
-                        if (label != 'How to play') SizedBox(width: r.s(16)),
-                        RoundIconButton(
-                          icon: icon,
-                          semanticLabel: label,
-                          size: r.s(42),
-                          color: AppColors.candyPurple,
-                          onTap: () => go(route),
-                        ),
-                      ],
+                      RoundIconButton(
+                        icon: Icons.school_rounded,
+                        semanticLabel: 'How to play',
+                        size: r.s(42),
+                        color: AppColors.candyPurple,
+                        onTap: () => go(AppRoutes.tutorial),
+                      ),
                     ],
                   ),
                 ),

@@ -14,6 +14,7 @@ class RunResult {
     required this.drops,
     required this.bestCombo,
     required this.seconds,
+    this.interstitialDue = false,
   });
 
   final int score;
@@ -29,6 +30,10 @@ class RunResult {
 
   /// Game-time length of the run.
   final double seconds;
+
+  /// An interstitial is due (per InterstitialPolicy); shown when the player
+  /// leaves the results screen, never before they've seen their score.
+  final bool interstitialDue;
 
   @override
   String toString() =>

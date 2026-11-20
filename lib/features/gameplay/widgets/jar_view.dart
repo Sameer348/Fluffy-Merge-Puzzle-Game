@@ -2,12 +2,14 @@ import 'dart:math' as math;
 
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/game_constants.dart';
 import '../../../core/utils/motion.dart';
 import '../../../game/fluffy_game.dart';
 import '../../../game/physics/physics_config.dart';
+import '../../shop/shop_controller.dart';
 import 'jar_overlays.dart';
 import 'next_preview.dart';
 
@@ -24,7 +26,7 @@ const double kJarRim = 6;
 ///
 /// When SHAKE fires, the whole jar wobbles side to side (skipped with
 /// reduce motion; the physics shake still happens).
-class JarView extends StatefulWidget {
+class JarView extends ConsumerStatefulWidget {
   const JarView({super.key, required this.game, this.onPick});
 
   final FluffyGame game;
@@ -33,10 +35,11 @@ class JarView extends StatefulWidget {
   final void Function(Vector2 px)? onPick;
 
   @override
-  State<JarView> createState() => _JarViewState();
+  ConsumerState<JarView> createState() => _JarViewState();
 }
 
-class _JarViewState extends State<JarView> with SingleTickerProviderStateMixin {
+class _JarViewState extends ConsumerState<JarView>
+    with SingleTickerProviderStateMixin {
   int? _pointer;
   late final AnimationController _wobble = AnimationController(
     vsync: this,
@@ -108,6 +111,7 @@ class _JarViewState extends State<JarView> with SingleTickerProviderStateMixin {
   }
 
   Widget _buildJar(BuildContext context) {
+    final skin = ref.watch(equippedJarProvider);
     return Semantics(
       container: true,
       label: 'Jar. Drag to aim, release to drop.',
@@ -136,7 +140,7 @@ class _JarViewState extends State<JarView> with SingleTickerProviderStateMixin {
                         innerRadius + kJarRim,
                       ),
                       border: Border.all(
-                        color: AppColors.white.withValues(alpha: 0.95),
+                        color: skin.rim.withValues(alpha: 0.95),
                         width: kJarRim,
                       ),
                       gradient: LinearGradient(
@@ -144,10 +148,7 @@ class _JarViewState extends State<JarView> with SingleTickerProviderStateMixin {
                         end: Alignment.bottomCenter,
                         // Frosted, warm glass: enough tint that creatures
                         // read clearly over the sky behind the jar.
-                        colors: [
-                          const Color(0xFFFFFBF6).withValues(alpha: 0.78),
-                          const Color(0xFFFFEFE4).withValues(alpha: 0.9),
-                        ],
+                        colors: [skin.interiorTop, skin.interiorBottom],
                       ),
                       boxShadow: const [
                         BoxShadow(
@@ -162,8 +163,12 @@ class _JarViewState extends State<JarView> with SingleTickerProviderStateMixin {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          const RepaintBoundary(
-                            child: CustomPaint(painter: _JarDecorPainter()),
+                          RepaintBoundary(
+                            child: CustomPaint(
+                              painter: _JarDecorPainter(
+                                sparkles: skin.sparkles,
+                              ),
+                            ),
                           ),
                           GameWidget<FluffyGame>(game: widget.game),
                           // Repeats the jar's own label; hide from readers.
@@ -211,7 +216,10 @@ class _JarViewState extends State<JarView> with SingleTickerProviderStateMixin {
 }
 
 class _JarDecorPainter extends CustomPainter {
-  const _JarDecorPainter();
+  const _JarDecorPainter({this.sparkles = false});
+
+  /// Little stars on the glass (Starry Wish skin).
+  final bool sparkles;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -242,10 +250,33 @@ class _JarDecorPainter extends CustomPainter {
       ),
       p,
     );
+    if (sparkles) {
+      p.color = const Color(0x99B48CFF);
+      for (final (fx, fy, fr) in const [
+        (0.12, 0.3, 0.018),
+        (0.78, 0.42, 0.014),
+        (0.3, 0.62, 0.012),
+        (0.65, 0.22, 0.01),
+        (0.2, 0.85, 0.014),
+        (0.85, 0.75, 0.012),
+      ]) {
+        final at = Offset(size.width * fx, size.height * fy);
+        final r = size.width * fr;
+        canvas.drawPath(
+          Path()
+            ..moveTo(at.dx, at.dy - r * 2)
+            ..quadraticBezierTo(at.dx, at.dy, at.dx + r * 2, at.dy)
+            ..quadraticBezierTo(at.dx, at.dy, at.dx, at.dy + r * 2)
+            ..quadraticBezierTo(at.dx, at.dy, at.dx - r * 2, at.dy)
+            ..quadraticBezierTo(at.dx, at.dy, at.dx, at.dy - r * 2),
+          p,
+        );
+      }
+    }
     // The danger line is drawn by the game (DangerLineComponent) so it
     // can pulse with the danger level.
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(_JarDecorPainter old) => old.sparkles != sparkles;
 }

@@ -29,6 +29,7 @@ class CreatureComponent extends BodyComponent
     Vector2? velocity,
     this.reduceMotion = false,
     this.onMounted,
+    this.onHit,
     this.onRemoved,
     this.fromMerge = false,
     int seed = 0,
@@ -61,6 +62,9 @@ class CreatureComponent extends BodyComponent
 
   /// Called once the body exists and the creature is in the world.
   final void Function(CreatureComponent)? onMounted;
+
+  /// Reports impacts (approach speed, m/s) for bounce sounds.
+  final void Function(double speed)? onHit;
 
   @override
   int get level => spec.level;
@@ -159,6 +163,7 @@ class CreatureComponent extends BodyComponent
 
   @override
   void onImpact(double speed) {
+    onHit?.call(speed);
     if (!_hasLanded) _hasLanded = true;
     // 1.5 m/s → barely; ~10 m/s → full squash.
     final s = ((speed - PhysicsConfig.hitThreshold) / 8.5).clamp(0.0, 1.0);

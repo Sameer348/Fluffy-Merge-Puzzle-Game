@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import '../models/creature_spec.dart';
 
 /// Procedural, asset-free renderer for plush "Puff" creatures.
@@ -67,28 +69,70 @@ abstract final class CreatureRenderer {
     canvas.translate(0, r * 0.93 * (1 - scaleY));
     canvas.scale(scaleX, scaleY);
 
-    final mono = silhouette ? _silhouette : null;
-    _drawEars(canvas, spec, r, mono);
-    _drawBackAccessory(canvas, spec, r, mono);
-
-    final body = _bodyPath(spec, r);
-    if (silhouette) {
-      _fill.color = _silhouette;
-      canvas.drawPath(body, _fill);
-    } else {
-      _bodyPaint.shader = _bodyShader(spec, r);
-      canvas.drawPath(body, _bodyPaint);
-      _stroke
-        ..color = spec.shade
-        ..strokeWidth = r * 0.07;
-      canvas.drawPath(body, _stroke);
-      _drawFur(canvas, spec, r);
-      _drawHighlight(canvas, r);
-      _drawFace(canvas, spec, r, expression, blink);
-    }
-
-    _drawFrontAccessory(canvas, spec, r, mono);
+    // Everything but the face is static for a given level and size, so
+    // it's recorded once and replayed: no per-frame path building.
+    canvas.drawPicture(_layer(spec, r, silhouette: silhouette, front: false));
+    if (!silhouette) _drawFace(canvas, spec, r, expression, blink);
+    final front = _layer(spec, r, silhouette: silhouette, front: true);
+    canvas.drawPicture(front);
     canvas.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cached static layers
+
+  static final Map<int, Picture> _layers = {};
+
+  /// How many static layers are cached (for tests).
+  @visibleForTesting
+  static int get cachedLayerCount => _layers.length;
+
+  /// Back layer (ears, back accessory, body, fur, highlight) or front
+  /// layer (front accessory) as a recorded [Picture].
+  static Picture _layer(
+    CreatureSpec spec,
+    double r, {
+    required bool silhouette,
+    required bool front,
+  }) {
+    final key = _key(spec, r, (silhouette ? 2 : 0) + (front ? 1 : 0) + 1);
+    final hit = _layers[key];
+    if (hit != null) return hit;
+    if (_layers.length >= 400) clearCache();
+    final rec = PictureRecorder();
+    final c = Canvas(rec);
+    final mono = silhouette ? _silhouette : null;
+    if (front) {
+      _drawFrontAccessory(c, spec, r, mono);
+    } else {
+      _drawEars(c, spec, r, mono);
+      _drawBackAccessory(c, spec, r, mono);
+      final body = _bodyPath(spec, r);
+      if (silhouette) {
+        _fill.color = _silhouette;
+        c.drawPath(body, _fill);
+      } else {
+        _bodyPaint.shader = _bodyShader(spec, r);
+        c.drawPath(body, _bodyPaint);
+        _stroke
+          ..color = spec.shade
+          ..strokeWidth = r * 0.07;
+        c.drawPath(body, _stroke);
+        _drawFur(c, spec, r);
+        _drawHighlight(c, r);
+      }
+    }
+    return _layers[key] = rec.endRecording();
+  }
+
+  /// Frees every cached path, shader and picture (e.g. on memory pressure).
+  static void clearCache() {
+    for (final p in _layers.values) {
+      p.dispose();
+    }
+    _layers.clear();
+    _paths.clear();
+    _shaders.clear();
   }
 
   /// Visual extent above the body center (for sizing widgets): some

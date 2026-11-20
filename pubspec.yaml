@@ -31,14 +31,12 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
   flutter_riverpod: ^3.5.0
   shared_preferences: ^2.5.6
-  google_fonts: ^9.0.0
   flame: ^1.38.2
   flame_forge2d: ^0.20.0
+  audioplayers: ^6.8.1
+  in_app_purchase: ^3.3.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -61,6 +59,29 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # Synthesized by tool/audio/gen_audio.py (original, no third-party audio).
+  assets:
+    - assets/audio/
+    - assets/fonts/OFL.txt
+
+  # Bundled UI fonts (SIL Open Font License 1.1, see assets/fonts/OFL.txt).
+  # Only the weights the app uses are shipped.
+  fonts:
+    - family: Fredoka
+      fonts:
+        - asset: assets/fonts/Fredoka-SemiBold.ttf
+          weight: 600
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Nunito-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Nunito-ExtraBold.ttf
+          weight: 800
+        - asset: assets/fonts/Nunito-Black.ttf
+          weight: 900
 
   # To add assets to your application, add an assets section, like this:
   # assets:
