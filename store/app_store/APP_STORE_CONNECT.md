@@ -81,6 +81,8 @@ merge,puzzle,cute,drop,physics,casual,relaxing,kawaii,plush,match,combo,offline,
 | Display | Folder | Size |
 |---|---|---|
 | iPhone 6.9" | `store/app_store/iphone_6_9_captioned/` | 1320 × 2868 |
+| iPhone 6.3" (if asked) | `store/app_store/iphone_6_3_captioned/` | 1206 × 2622 |
+| iPhone 6.1" (alternative) | `store/app_store/iphone_6_1_captioned/` | 1179 × 2556 |
 | iPad 13" | `store/app_store/ipad_13_captioned/` | 2064 × 2752 |
 
 Apple scales the 6.9" set down for smaller iPhones and the 13" set for

@@ -103,3 +103,18 @@ for device, (size, caption_h, shot_h, radius) in DEVICES.items():
         assert img.size == size and img.mode == 'RGB'
         img.save(os.path.join(out, name + '.png'), optimize=True)
     print(f'{device}: {len(CAPTIONS)} captioned screenshots -> {out}')
+
+# Smaller iPhone sizes App Store Connect may ask for (6.3" and 6.1"):
+# scale the 6.9" set to cover, then centre-crop (aspect ratios differ <0.3%).
+SMALLER = {'iphone_6_3_captioned': (1206, 2622), 'iphone_6_1_captioned': (1179, 2556)}
+big = os.path.join(ROOT, 'store', 'app_store', 'iphone_6_9_captioned')
+for folder, (tw, th) in SMALLER.items():
+    out = os.path.join(ROOT, 'store', 'app_store', folder)
+    os.makedirs(out, exist_ok=True)
+    for name in CAPTIONS:
+        im = Image.open(os.path.join(big, name + '.png')).convert('RGB')
+        s = max(tw / im.width, th / im.height)
+        r = im.resize((round(im.width * s), round(im.height * s)), Image.LANCZOS)
+        left, top = (r.width - tw) // 2, (r.height - th) // 2
+        r.crop((left, top, left + tw, top + th)).save(os.path.join(out, name + '.png'), optimize=True)
+    print(f'{folder}: {len(CAPTIONS)} screenshots ({tw} x {th})')
