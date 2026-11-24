@@ -1,15 +1,17 @@
 # Fluffy Merge: store release kit
 
 Everything needed to submit version **1.0.0 (build 1)** to Google Play and
-the App Store. Regenerate any image with the scripts in `tool/`.
+the App Store. **For iOS, every App Store Connect field (listing text, App
+Privacy, age rating, in-app purchases, review notes) is ready to paste in
+[`app_store/APP_STORE_CONNECT.md`](app_store/APP_STORE_CONNECT.md).** Regenerate any image with the scripts in `tool/`.
 
 | Item | Google Play | App Store |
 |---|---|---|
 | App ID | `com.fluffymerge.fluffy_merge` | `com.fluffymerge.fluffyMerge` |
 | App icon | `google_play/icon_512.png` | `app_store/app_icon_1024.png` (no alpha) |
 | Feature graphic | `google_play/feature_graphic_1024x500.png` | n/a |
-| Phone screenshots | `google_play/phone/` (1080 × 2160) | `app_store/iphone_6_9/` (1320 × 2868) |
-| Tablet screenshots | `google_play/tablet/` (2064 × 2752) | `app_store/ipad_13/` (2064 × 2752) |
+| Phone screenshots | `google_play/phone/` (1080 × 2160) | `app_store/iphone_6_9_captioned/` (1320 × 2868) |
+| Tablet screenshots | `google_play/tablet/` (2064 × 2752) | `app_store/ipad_13_captioned/` (2064 × 2752) |
 | Privacy policy | `docs/privacy_policy.md` (host it, see below) | same URL |
 
 Both App IDs are permanent once the app is published.
@@ -18,8 +20,8 @@ Both App IDs are permanent once the app is published.
 
 ## 1. Before the first upload
 
-1. **Fill in a support email.** Replace `SUPPORT_EMAIL` in
-   `docs/privacy_policy.md`. Both stores also ask for one.
+1. **Support email:** set to the Apple developer account email in
+   `docs/privacy_policy.md` and `docs/support.md`. Both stores also ask for one.
 2. **Host the privacy policy.** In the GitHub repo go to Settings → Pages,
    then set Source to "Deploy from a branch", branch `main`, folder `/docs`.
    The policy will be at

@@ -4,44 +4,62 @@ title: Fluffy Merge Privacy Policy
 
 # Fluffy Merge Privacy Policy
 
-_Last updated: November 20, 2026_
+_Effective: November 24, 2026_
 
-Fluffy Merge is a single-player puzzle game. This policy explains what
-happens to your information when you play it.
+Fluffy Merge ("the app") is a single-player puzzle game for iPhone, iPad
+and Android. This policy explains what happens to your information when
+you use it. In short: **we collect nothing.**
 
-## What we collect
+## Information we collect
 
-**Nothing.** Fluffy Merge has no accounts, no sign-in, no analytics and no
-advertising. The app makes no network requests of its own.
+**None.** The app has no accounts, no sign-in, no analytics, no
+advertising and no tracking. It makes no network requests of its own,
+and it doesn't use your contacts, location, photos, camera, microphone or
+advertising identifier.
 
-## What stays on your device
+## Information stored on your device
 
-Your progress (scores, coins, power-ups, unlocked creatures, daily
-challenge streak and settings) is saved **only on your device**. It is
-never sent to us or to anyone else. Deleting the app deletes this data.
+To keep your game progress, the app saves the following **only on your
+device**:
 
-If your phone's own backup is turned on (iCloud Backup or Android
-Backup), your device may include this game data in its backup. Apple or
-Google handle that under their own privacy policies; we never receive it.
+- scores, coins, power-ups and unlocked creatures;
+- daily-challenge progress and login streak;
+- settings (sound, music, haptics, reduced animations).
 
-## Purchases
+This data never leaves your device through the app, and we can't see it.
+Deleting the app deletes it.
 
-Optional in-app purchases (coin packs) are processed entirely by the
-Apple App Store or Google Play. We never see your payment details. We
-only learn from the store that a purchase succeeded, so the game can give
-you what you bought.
+If you use your device's own backup (iCloud Backup on iPhone/iPad, or
+Google backup on Android), that backup may include this game data. Apple
+and Google handle those backups under their own privacy policies; we
+never receive them.
 
-## Children
+## In-app purchases
 
-Fluffy Merge is suitable for all ages and collects no personal
-information from anyone, including children.
+The app offers optional in-app purchases (coin packs). They are processed
+entirely by the **Apple App Store** or **Google Play**. We never receive
+your name, payment card or billing details. The store only tells the app
+that a purchase succeeded, so it can give you what you bought.
 
-## Changes
+## Children's privacy
 
-If a future version adds anything that changes this (for example
-advertising), this policy will be updated first, and the app's
-Settings → Privacy page will say so.
+The app is suitable for all ages. Because it collects no personal
+information from anyone, it collects none from children under 13 (or the
+relevant age in your country) either.
+
+## Your rights
+
+Because we hold no personal data about you, there's nothing for us to
+access, correct, export or delete. You control all game data on your
+device and can remove it at any time by deleting the app.
+
+## Changes to this policy
+
+If a future version changes any of this (for example by adding
+advertising), we'll update this page before that version is released, and
+the app's **Settings → Privacy** screen will reflect it. The "Effective"
+date above shows the latest version.
 
 ## Contact
 
-Questions about this policy: **SUPPORT_EMAIL**
+Questions about this policy or the app: **[thennmininaturals@icloud.com](mailto:thennmininaturals@icloud.com)**
